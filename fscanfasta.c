@@ -6,6 +6,12 @@
 #include <time.h>
 #include <errno.h>
 
+extern int fast_fscanf_mem(
+    const char *buffer, size_t size,
+    size_t *offset,
+    const char *format, ...
+);
+
 /* Boolean type for better readability */
 typedef int BOOL;
 #define TRUE 1
@@ -460,7 +466,7 @@ void create_test_file(const char *filename, size_t target_size) {
     unsigned long rec_no = 0;
     while(total_written < target_size) {
         int n = fprintf(f,
-            ":%lx[%hd]( %hd %hu %d %x %lx %f %Lf %s %02hd/%02hd/%04hd %02hd:%02hd:%02hd\n",
+            ":%lx[%hd]( %hd %hu %d %hx %lx %f %Lf %s %02hd/%02hd/%04hd %02hd:%02hd:%02hd\n",
             rec_no, (short)5,
             (short)(rec_no % 32767), (unsigned short)(rec_no % 65535),
             (int)rec_no, (unsigned short)(rec_no % 65535), rec_no,
@@ -490,7 +496,7 @@ void test_fscanf(const char *filename) {
     Record rec;
     unsigned long count = 0;
     clock_t start = clock();
-    while (fscanf(f, ":%lx[%hd]( %hd %hu %d %x %lx %f %Lf %63s %hd/%hd/%hd %hd:%hd:%hd\n",
+    while (fscanf(f, ":%lx[%hd]( %hd %hu %d %hx %lx %f %Lf %63s %hd/%hd/%hd %hd:%hd:%hd\n",
            &rec.pn_prog, &rec.pn_n, &rec.field_short, &rec.field_ushort,
            &rec.field_int, &rec.field_hexushort, &rec.field_hexulong,
            &rec.field_float, &rec.field_ldouble, rec.token,
@@ -520,9 +526,67 @@ void test_custom(const char *filename) {
     }
     clock_t end = clock();
     double elapsed = (double)(end - start) / CLOCKS_PER_SEC;
-    printf("custom: %lu record read in %.3f seconds (%.3f usec/record)\n",
+    printf("fscanfasta[C]: %lu record read in %.3f seconds (%.3f usec/record)\n",
            count, elapsed, (elapsed*1e6)/count);
     ioClose(&io);
+}
+
+void test_fast_fscanf_mem(const char *filename)
+{
+    // 1) Load file into memory
+    FILE *fp = fopen(filename, "rb");
+    if (!fp) {
+        perror("fopen");
+        exit(1);
+    }
+    fseek(fp, 0, SEEK_END);
+    long fsize = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    char *buffer = (char*)malloc(fsize);
+    if (!buffer) {
+        fclose(fp);
+        fprintf(stderr, "malloc failed\n");
+        exit(1);
+    }
+    fread(buffer, 1, fsize, fp);
+    fclose(fp);
+
+    // 2) Prepare to parse
+    size_t offset = 0;
+    unsigned long count = 0;
+
+    clock_t start = clock();
+
+    Record rec;
+    // We'll parse lines with the same format you used in your old code:
+    // ":%lx[%hd]( %hd %hu %d %hx %lx %f %Lf %63s %hd/%hd/%hd %hd:%hd:%hd\n"
+    //  This is 16 fields total.
+    while (1) {
+        int n = fast_fscanf_mem(buffer, fsize, &offset,
+            ":%lx[%hd]( %hd %hu %d %hx %lx %f %Lf %63s "
+            "%hd/%hd/%hd %hd:%hd:%hd\n",
+            &rec.pn_prog, &rec.pn_n,
+            &rec.field_short, &rec.field_ushort,
+            &rec.field_int, &rec.field_hexushort, &rec.field_hexulong,
+            &rec.field_float, &rec.field_ldouble,
+            rec.token,
+            &rec.day, &rec.month, &rec.year,
+            &rec.hour, &rec.minute, &rec.second
+        );
+        if (n < 16) {
+            // not enough fields matched -> we're done
+            break;
+        }
+        count++;
+    }
+
+    clock_t end = clock();
+    double elapsed = (double)(end - start) / CLOCKS_PER_SEC;
+    printf("fscanfasta[C++]: %lu record read in %.3f seconds (%.3f usec/record)\n",
+           count, elapsed, (elapsed*1e6)/count);
+
+    free(buffer);
 }
 
 /* Main function - creates test file if needed, then runs benchmarks */
@@ -539,9 +603,20 @@ int main(int argc, char *argv[]) {
         printf("Test file '%s' already existing.\n", filename);
     }
 
-    test_fscanf(filename);
-
-    test_custom(filename);
+    test_fscanf(filename);     // standard fscanf
+    test_custom(filename);     // your custom memory-based read
+    test_fast_fscanf_mem(filename); // newly-added fast_fscanf_mem test
 
     return 0;
 }
+
+/*
+BUILD COMMANDS
+Open the Start Menu, search for “Developer Command Prompt” 
+cd /D path
+cl /EHsc /O2 /std:c++20 fast_fscanf.cpp fscanfasta.c /Fe:fscanfasta.exe
+
+RUN COMMANDS
+Open folder in terminal
+./fscanfasta
+*/

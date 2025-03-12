@@ -1,3 +1,6 @@
 fscanfasta.exe
 testdata.txt
 .vscode/tasks.json
+fast_fscanf.obj
+fscanfasta.obj
+testdata_%x.txt

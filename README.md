@@ -3,6 +3,7 @@
 A tiny experiment comparing two approaches to parsing structured data:
 1. Standard C library's `fscanf()`
 2. Custom in-memory buffer parsing
+3. C++ centrilized function with scanf-like format string
 
 ## What is this?
 
@@ -13,8 +14,9 @@ fscanfasta demonstrates how reading structured data directly from memory can be 
 With a ~300MB test file:
 
 ```
-fscanf: 3451936 record read in 5.887 seconds (1.705 usec/record)
-custom: 3451936 record read in 1.455 seconds (0.422 usec/record)
+fscanf: 3320264 record read in 8.370 seconds (2.521 usec/record)
+fscanfasta[C]: 3320264 record read in 2.132 seconds (0.642 usec/record)
+fscanfasta[C++]: 3320264 record read in 3.110 seconds (0.937 usec/record)
 ```
 
 Memory buffer parsing is ~3x/4x faster on typical hardware.
@@ -28,9 +30,16 @@ gcc -o fscanfasta fscanfasta.c
 ./fscanfasta
 ```
 
+For the C++ implementation:
+
+```
+cl /EHsc /O2 /std:c++20 fast_fscanf.cpp fscanfasta.c /Fe:fscanfasta.exe
+./fscanfasta
+```
+
 The program will:
 1. Generate a test file (`testdata.txt`) if it doesn't exist
-2. Compare parsing speed using both methods
+2. Compare parsing speed using the 3 methods
 
 ## Why?
 
